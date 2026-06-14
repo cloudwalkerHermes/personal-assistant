@@ -26,6 +26,7 @@ def init_db():
                 store TEXT NOT NULL,
                 item_name TEXT NOT NULL,
                 normalized_name TEXT,
+                upc TEXT,
                 purchased_at DATE,
                 price REAL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -52,6 +53,12 @@ def init_db():
                 sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+    # Migrations for columns added after initial deploy
+    try:
+        conn.execute("ALTER TABLE purchase_history ADD COLUMN upc TEXT")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
     conn.close()
 
 

@@ -11,19 +11,22 @@ Run:
 import os
 from datetime import date
 from core.db import get_conn, init_db
-from integrations.kroger.promotions import find_sales_for_items
+from integrations.kroger.promotions import find_sales_for_upcs, find_sales_for_items
 
 KROGER_LOCATION_ID = os.getenv("KROGER_LOCATION_ID", "")
 KROGER_ZIP = os.getenv("KROGER_ZIP", "")
 
 
-def get_known_items() -> list[str]:
+def get_known_items() -> tuple[list[str], list[str]]:
+    """Returns (upcs, names_without_upc)."""
     conn = get_conn()
     rows = conn.execute(
-        "SELECT DISTINCT normalized_name FROM purchase_history WHERE store='kroger'"
+        "SELECT DISTINCT normalized_name, upc FROM purchase_history WHERE store='kroger'"
     ).fetchall()
     conn.close()
-    return [row["normalized_name"] for row in rows]
+    upcs = [r["upc"] for r in rows if r["upc"]]
+    names_no_upc = [r["normalized_name"] for r in rows if not r["upc"]]
+    return upcs, names_no_upc
 
 
 def already_sent(item_name: str, week_of: str) -> bool:
@@ -62,16 +65,26 @@ def run():
     init_db()
     week_of = str(date.today())
     location_id = resolve_location_id()
-    items = get_known_items()
+    upcs, names_no_upc = get_known_items()
 
-    if not items:
-        print("No purchase history found. Run scripts/seed_kroger_history.py first.")
+    if not upcs and not names_no_upc:
+        print("No purchase history found. Run scripts/scrape_kroger_history.py first.")
         return
 
-    sales = find_sales_for_items(items, location_id)
-    new_sales = [
-        s for s in sales if not already_sent(s.name.lower(), week_of)
-    ]
+    sales = []
+
+    if upcs:
+        print(f"Checking {len(upcs)} known UPCs for sales...")
+        sales.extend(find_sales_for_upcs(upcs, location_id))
+
+    if names_no_upc:
+        print(f"Text-searching {len(names_no_upc)} items without UPCs...")
+        sales.extend(find_sales_for_items(names_no_upc, location_id))
+
+    # Sort all sales by savings pct descending
+    sales.sort(key=lambda s: s.savings_pct() or 0, reverse=True)
+
+    new_sales = [s for s in sales if not already_sent(s.name.lower(), week_of)]
 
     if not new_sales:
         print("No new sales this week.")
@@ -82,8 +95,7 @@ def run():
         lines.append(sale.format_line())
         record_sent(sale.name.lower(), sale.sale_price, sale.regular_price or 0, week_of)
 
-    blast = "\n".join(lines)
-    print(blast)
+    print("\n".join(lines))
 
 
 if __name__ == "__main__":

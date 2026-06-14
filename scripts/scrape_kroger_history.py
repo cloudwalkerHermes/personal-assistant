@@ -88,12 +88,12 @@ def fetch_all_upcs_via_playwright() -> set[str]:
     return upcs
 
 
-def resolve_product_names(upcs: set[str]) -> list[str]:
+def resolve_products(upcs: set[str]) -> list[tuple[str, str]]:
+    """Returns list of (upc, name) tuples."""
     client = KrogerClient()
-    names = []
+    results = []
     upc_list = list(upcs)
 
-    # Kroger API allows filtering by productId (UPC)
     for i in range(0, len(upc_list), 10):
         batch = upc_list[i:i+10]
         try:
@@ -104,19 +104,20 @@ def resolve_product_names(upcs: set[str]) -> list[str]:
             })
             for product in data.get("data", []):
                 name = product.get("description", "").strip()
-                if name:
-                    names.append(name)
+                upc = product.get("upc", "").strip()
+                if name and upc:
+                    results.append((upc, name))
         except Exception as e:
             print(f"  Warning: batch lookup failed ({e})")
         time.sleep(0.2)
 
-    return names
+    return results
 
 
-def seed_items(names: list[str]):
+def seed_items(products: list[tuple[str, str]]):
     conn = get_conn()
     inserted = skipped = 0
-    for name in names:
+    for upc, name in products:
         normalized = name.lower().strip()
         if not normalized:
             continue
@@ -125,11 +126,16 @@ def seed_items(names: list[str]):
             (normalized,),
         ).fetchone()
         if existing:
+            # Backfill UPC if missing
+            conn.execute(
+                "UPDATE purchase_history SET upc=? WHERE store='kroger' AND normalized_name=? AND upc IS NULL",
+                (upc, normalized),
+            )
             skipped += 1
         else:
             conn.execute(
-                "INSERT INTO purchase_history (store, item_name, normalized_name) VALUES ('kroger', ?, ?)",
-                (name.strip(), normalized),
+                "INSERT INTO purchase_history (store, item_name, normalized_name, upc) VALUES ('kroger', ?, ?, ?)",
+                (name.strip(), normalized, upc),
             )
             inserted += 1
     conn.commit()
@@ -148,10 +154,10 @@ def run():
         return
 
     print("Resolving product names via Kroger API...")
-    names = resolve_product_names(upcs)
-    print(f"Resolved {len(names)} product names.")
+    products = resolve_products(upcs)
+    print(f"Resolved {len(products)} products.")
 
-    inserted, skipped = seed_items(names)
+    inserted, skipped = seed_items(products)
     print(f"\nDone. Inserted {inserted} items, skipped {skipped} duplicates.")
 
 

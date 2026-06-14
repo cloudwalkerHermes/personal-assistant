@@ -59,3 +59,20 @@ class KrogerClient:
             "filter.limit": limit,
         })
         return data.get("data", [])
+
+    def lookup_by_upcs(self, upcs: list[str], location_id: str) -> list[dict]:
+        """Batch lookup by UPC (up to 50 per call)."""
+        products = []
+        for i in range(0, len(upcs), 50):
+            batch = upcs[i:i+50]
+            try:
+                data = self._get("/products", {
+                    "filter.productId": ",".join(batch),
+                    "filter.locationId": location_id,
+                    "filter.limit": 50,
+                })
+                products.extend(data.get("data", []))
+            except Exception as e:
+                print(f"  Warning: UPC batch {i//50+1} failed ({e})")
+            time.sleep(0.1)
+        return products
