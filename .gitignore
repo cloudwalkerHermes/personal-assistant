@@ -1,0 +1,11 @@
+.env
+*.db
+*.db-shm
+*.db-wal
+credentials.json
+token.json
+__pycache__/
+*.pyc
+.venv/
+dist/
+.ruff_cache/

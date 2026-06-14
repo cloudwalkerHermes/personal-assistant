@@ -1,0 +1,21 @@
+[project]
+name = "personal-assistant"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "plaid-python",
+    "garminconnect",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "requests",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = ["ruff", "pytest"]
+
+[tool.uv]
+dev-dependencies = ["ruff", "pytest"]
+
+[tool.ruff]
+line-length = 100
