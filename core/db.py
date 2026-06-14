@@ -52,6 +52,29 @@ def init_db():
                 week_of DATE,
                 sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS plaid_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id TEXT NOT NULL UNIQUE,
+                access_token TEXT NOT NULL,
+                institution_name TEXT,
+                cursor TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                transaction_id TEXT NOT NULL UNIQUE,
+                item_id TEXT NOT NULL,
+                account_id TEXT NOT NULL,
+                date DATE NOT NULL,
+                name TEXT,
+                merchant_name TEXT,
+                amount REAL,
+                category TEXT,
+                pending INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
     # Migrations for columns added after initial deploy
     try:
