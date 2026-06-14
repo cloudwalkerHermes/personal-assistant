@@ -26,7 +26,7 @@ class SaleItem:
             if pct:
                 price_str += f", {pct}% off"
             price_str += ")"
-        return f"• {self.brand} {self.name} {self.size} — {price_str}"
+        return f"• {self.brand} {self.name} {self.size} — {price_str}\n"
 
 
 def _extract_sale(product: dict) -> SaleItem | None:
