@@ -42,10 +42,11 @@ class KrogerClient:
         resp.raise_for_status()
         return resp.json()
 
-    def find_store(self, zip_code: str) -> dict | None:
+    def find_store(self, lat: str, lon: str, radius_miles: int = 10) -> dict | None:
         data = self._get("/locations", {
-            "filter.zipCode": zip_code,
-            "filter.radiusInMiles": "10",
+            "filter.lat.near": lat,
+            "filter.lon.near": lon,
+            "filter.radiusInMiles": str(radius_miles),
             "filter.limit": "1",
         })
         locations = data.get("data", [])

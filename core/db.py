@@ -12,6 +12,15 @@ def init_db():
     conn = get_conn()
     with conn:
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS oauth_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service TEXT NOT NULL UNIQUE,
+                access_token TEXT NOT NULL,
+                refresh_token TEXT,
+                expires_at INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE IF NOT EXISTS purchase_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 store TEXT NOT NULL,
