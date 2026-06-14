@@ -1,14 +1,116 @@
 """
-Scrapes Kroger purchase history from kroger.com and seeds the database.
-Run once to populate your item list.
+Scrapes Kroger purchase history via internal API and seeds the database.
+Uses Playwright to get session cookies, then calls the purchase-history API
+to collect UPCs, then resolves product names via the developer API.
 
+Run once to populate your item list:
   uv run scripts/scrape_kroger_history.py
 """
 
 import time
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import sync_playwright
 from core.db import get_conn, init_db
 from core.config import KROGER_SHOPPING_EMAIL, KROGER_SHOPPING_PASSWORD
+from integrations.kroger.client import KrogerClient
+
+HISTORY_API = "https://www.kroger.com/atlas/v1/post-order/v1/purchase-history-search"
+
+
+def fetch_all_upcs_via_playwright() -> set[str]:
+    upcs = set()
+    captured_pages = {}
+
+    def handle_response(response):
+        if "purchase-history-search" in response.url and response.status == 200:
+            try:
+                body = response.json()
+                orders = body.get("data", {}).get("postOrderSearch", {}).get("data", [])
+                page_no = response.url.split("pageNo=")[-1].split("&")[0]
+                captured_pages[page_no] = orders
+            except Exception:
+                pass
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=False,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        ctx = browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            viewport={"width": 1280, "height": 800},
+        )
+        page = ctx.new_page()
+        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        page.on("response", handle_response)
+
+        print("Signing in to Kroger...")
+        page.goto("https://www.kroger.com/signin")
+        time.sleep(8)
+        page.fill('#signInName', KROGER_SHOPPING_EMAIL)
+        page.fill('#password', KROGER_SHOPPING_PASSWORD)
+        page.click('button[type="submit"], #next')
+        time.sleep(8)
+
+        # Navigate to purchase history — the browser will call the API automatically
+        print("Loading purchase history (page 1)...")
+        page.goto("https://www.kroger.com/mypurchases")
+        page.wait_for_load_state("domcontentloaded")
+        time.sleep(6)
+
+        # Use page.evaluate to trigger subsequent pages via fetch
+        page_no = 2
+        while True:
+            result = page.evaluate(f"""async () => {{
+                const r = await fetch('{HISTORY_API}?pageNo={page_no}&pageSize=50');
+                if (!r.ok) return null;
+                return await r.json();
+            }}""")
+            if not result:
+                break
+            orders = result.get("data", {}).get("postOrderSearch", {}).get("data", [])
+            if not orders:
+                break
+            captured_pages[str(page_no)] = orders
+            print(f"  Fetched page {page_no}...")
+            page_no += 1
+
+        browser.close()
+
+    # Extract UPCs from all captured pages
+    for orders in captured_pages.values():
+        for order in orders:
+            for item in order.get("lineItems", []):
+                upc = item.get("upc", "").strip()
+                if upc:
+                    upcs.add(upc)
+
+    print(f"  Captured {len(captured_pages)} pages, {len(upcs)} unique UPCs.")
+    return upcs
+
+
+def resolve_product_names(upcs: set[str]) -> list[str]:
+    client = KrogerClient()
+    names = []
+    upc_list = list(upcs)
+
+    # Kroger API allows filtering by productId (UPC)
+    for i in range(0, len(upc_list), 10):
+        batch = upc_list[i:i+10]
+        try:
+            data = client._get("/products", {
+                "filter.productId": ",".join(batch),
+                "filter.locationId": "03500957",
+                "filter.limit": 10,
+            })
+            for product in data.get("data", []):
+                name = product.get("description", "").strip()
+                if name:
+                    names.append(name)
+        except Exception as e:
+            print(f"  Warning: batch lookup failed ({e})")
+        time.sleep(0.2)
+
+    return names
 
 
 def seed_items(names: list[str]):
@@ -35,64 +137,23 @@ def seed_items(names: list[str]):
     return inserted, skipped
 
 
-def scrape():
+def run():
     init_db()
-    all_items = []
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        page = browser.new_page()
+    upcs = fetch_all_upcs_via_playwright()
+    print(f"Found {len(upcs)} unique UPCs across all orders.")
 
-        print("Navigating to Kroger...")
-        page.goto("https://www.kroger.com/signin")
-        page.wait_for_load_state("networkidle")
-
-        print("Signing in...")
-        page.fill('input[name="email"]', KROGER_SHOPPING_EMAIL)
-        page.click('button[type="submit"]')
-        page.wait_for_load_state("networkidle")
-
-        page.fill('input[name="password"]', KROGER_SHOPPING_PASSWORD)
-        page.click('button[type="submit"]')
-        page.wait_for_load_state("networkidle")
-        time.sleep(2)
-
-        print("Navigating to purchase history...")
-        page.goto("https://www.kroger.com/account/purchase-history")
-        page.wait_for_load_state("networkidle")
-        time.sleep(3)
-
-        while True:
-            # Grab all product names visible on the page
-            items = page.locator('[data-testid="product-title"], .kds-Text--l, .product-title, h2.kds-Heading, [class*="product-name"]').all_text_contents()
-            items = [i.strip() for i in items if i.strip()]
-            all_items.extend(items)
-            print(f"  Found {len(all_items)} items so far...")
-
-            # Try to click "Load More" or next page
-            try:
-                load_more = page.locator('button:has-text("Load More"), button:has-text("Show More"), [data-testid="load-more"]').first
-                if load_more.is_visible(timeout=3000):
-                    load_more.click()
-                    page.wait_for_load_state("networkidle")
-                    time.sleep(2)
-                else:
-                    break
-            except PlaywrightTimeout:
-                break
-
-        browser.close()
-
-    unique = list(dict.fromkeys(all_items))
-    print(f"\nScraped {len(unique)} unique items.")
-
-    if not unique:
-        print("Nothing found — the page selectors may need updating.")
+    if not upcs:
+        print("No UPCs found — something went wrong with the session.")
         return
 
-    inserted, skipped = seed_items(unique)
-    print(f"Seeded DB: {inserted} inserted, {skipped} already existed.")
+    print("Resolving product names via Kroger API...")
+    names = resolve_product_names(upcs)
+    print(f"Resolved {len(names)} product names.")
+
+    inserted, skipped = seed_items(names)
+    print(f"\nDone. Inserted {inserted} items, skipped {skipped} duplicates.")
 
 
 if __name__ == "__main__":
-    scrape()
+    run()
