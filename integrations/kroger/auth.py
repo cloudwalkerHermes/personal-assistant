@@ -6,7 +6,7 @@ from core.config import KROGER_CLIENT_ID, KROGER_CLIENT_SECRET
 
 BASE_URL = "https://api.kroger.com/v1"
 REDIRECT_URI = "http://localhost:8000/callback"
-SCOPES = "openid profile.compact cart.basic:write product.compact"
+SCOPES = "cart.basic:write product.compact"
 
 
 def get_auth_url() -> str:
