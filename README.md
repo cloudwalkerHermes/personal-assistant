@@ -1,0 +1,1 @@
+Just an assistant who checks my accounts, knows my bills, warns me of funding issues, hits my inboc with kroger ad items I have purchased in the past. Uses GarminConnect to repot my sleep, body battery and previous day's metric.
