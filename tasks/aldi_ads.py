@@ -95,7 +95,6 @@ def scrape() -> list[dict]:
 # ── FORMAT ────────────────────────────────────────────────────────────────────
 
 def build_message(rows: list[dict]) -> str:
-    # Group by category
     by_cat: dict[str, list[dict]] = {}
     for row in rows:
         cat = (row.get("Category") or "Other").strip()

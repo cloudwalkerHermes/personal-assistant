@@ -322,22 +322,18 @@ def main():
     def t(key: str) -> str:
         return f" {trends[key]}" if trends.get(key) else ""
 
+    score   = sleep.get("score")
+    qual    = sleep.get("qualifier", "").replace("_", " ").lower() or _score_bar(score)
+    total_h = sleep.get("total_h", "?")
+    steps   = stats.get("steps")
+    rhr     = stats.get("resting_hr")
+
     score = sleep.get("score")
     lines = [f"🏃 Garmin — {YESTERDAY}"]
-    lines.append(
-        f"😴 Sleep: {score or 'n/a'}{t('sleep_score')} "
-        f"({sleep.get('qualifier','').replace('_',' ').lower() or _score_bar(score)}) "
-        f"— {sleep.get('total_h','?')}h{t('sleep_total')}"
-    )
+    lines.append(f"😴 Sleep: {score or 'n/a'}{t('sleep_score')} ({qual}) — {total_h}h{t('sleep_total')}")
     lines.append(f"   Deep {sleep.get('deep_h','?')}h  REM {sleep.get('rem_h','?')}h  Light {sleep.get('light_h','?')}h")
-    lines.append(
-        f"🔋 Body battery: +{battery.get('charged','?')}{t('charged')} charged "
-        f"/ -{battery.get('drained','?')} drained "
-        f"/ {battery.get('waking_peak','?')}{t('waking')} waking"
-    )
-    steps = stats.get("steps")
+    lines.append(f"🔋 Battery: +{battery.get('charged','?')}{t('charged')} charged / -{battery.get('drained','?')} drained / {battery.get('waking_peak','?')}{t('waking')} waking")
     lines.append(f"👟 Steps: {steps:,}{t('steps')}" if steps else "👟 Steps: n/a")
-    rhr = stats.get("resting_hr")
     lines.append(f"❤️ Resting HR: {rhr} bpm{t('rhr')}" if rhr else "❤️ HR: n/a")
     lines.append(f"😤 Stress: {_stress_label(stats.get('avg_stress'))}{t('stress')}")
 

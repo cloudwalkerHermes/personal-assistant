@@ -211,6 +211,7 @@ def main():
     write_flag(avg_3d)
 
     day_label = date.today().strftime("%A  %b %-d")
+
     msg_lines = [f"🗓️  {day_label}", ""]
     msg_lines += w_lines
     msg_lines += [
