@@ -12,6 +12,7 @@ import os
 from datetime import date
 from core.db import get_conn, init_db
 from integrations.kroger.promotions import find_sales_for_upcs, find_sales_for_items
+from integrations.telegram import send as telegram_send
 
 KROGER_LOCATION_ID = os.getenv("KROGER_LOCATION_ID", "")
 KROGER_ZIP = os.getenv("KROGER_ZIP", "")
@@ -90,12 +91,14 @@ def run():
         print("No new sales this week.")
         return
 
-    lines = [f"Kroger Sales — week of {week_of}\n"]
+    lines = [f"🛒 Kroger Sales — week of {week_of}\n"]
     for sale in new_sales:
         lines.append(sale.format_line())
         record_sent(sale.name.lower(), sale.sale_price, sale.regular_price or 0, week_of)
 
-    print("\n".join(lines))
+    message = "\n".join(lines)
+    print(message)
+    telegram_send(message)
 
 
 if __name__ == "__main__":

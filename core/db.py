@@ -75,7 +75,47 @@ def init_db():
                 pending INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS garmin_daily (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                date             DATE NOT NULL UNIQUE,
+                sleep_score      INTEGER,
+                sleep_qualifier  TEXT,
+                sleep_total_h    REAL,
+                sleep_deep_h     REAL,
+                sleep_rem_h      REAL,
+                sleep_light_h    REAL,
+                sleep_awake_h    REAL,
+                battery_charged  INTEGER,
+                battery_drained  INTEGER,
+                battery_waking   INTEGER,
+                steps            INTEGER,
+                active_minutes   INTEGER,
+                calories         INTEGER,
+                resting_hr       INTEGER,
+                avg_hr           INTEGER,
+                avg_stress       INTEGER,
+                max_stress       INTEGER,
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS garmin_fitness (
+                id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                date                  DATE NOT NULL UNIQUE,
+                chronological_age     REAL,
+                fitness_age           REAL,
+                achievable_age        REAL,
+                previous_fitness_age  REAL,
+                vigorous_days_avg     REAL,
+                vigorous_minutes_avg  REAL,
+                rhr                   INTEGER,
+                bmi                   REAL,
+                bmi_target            REAL,
+                bmi_last_measured     DATE,
+                created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """)
+
     # Migrations for columns added after initial deploy
     try:
         conn.execute("ALTER TABLE purchase_history ADD COLUMN upc TEXT")

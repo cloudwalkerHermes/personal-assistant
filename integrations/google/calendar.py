@@ -35,33 +35,50 @@ def get_or_create_calendar(service, name: str = "Bills & Recurring") -> str:
 
 
 def upsert_bill_event(service, calendar_id: str, bill: dict):
-    """Creates or updates a recurring calendar event for a bill."""
-    title = f"💳 {bill['name']} — ${bill['amount']:.2f}"
-    due_day = bill["due_day"]
+    """Creates or updates a recurring calendar event for a bill or income."""
+    from datetime import date, timedelta
+    import calendar as cal_mod
 
-    # Build RRULE: monthly on the due day
-    rrule = f"RRULE:FREQ=MONTHLY;BYMONTHDAY={due_day}"
+    amount   = bill["amount"]
+    freq     = bill.get("frequency", "monthly")
+    due_day  = bill["due_day"]
+    today    = date.today()
+    is_income = amount < 0
 
-    # Find next occurrence date string (YYYY-MM-DD) for the start
-    from datetime import date
-    today = date.today()
-    year, month = today.year, today.month
-    try:
-        start_date = date(year, month, due_day)
-    except ValueError:
-        # Day doesn't exist in month (e.g. Feb 30), use last day
-        import calendar
-        last_day = calendar.monthrange(year, month)[1]
-        start_date = date(year, month, last_day)
-    if start_date < today:
-        month = month + 1 if month < 12 else 1
-        year = year if month > 1 else year + 1
-        try:
-            start_date = date(year, month, due_day)
-        except ValueError:
-            import calendar
-            last_day = calendar.monthrange(year, month)[1]
-            start_date = date(year, month, last_day)
+    if is_income:
+        title = f"💰 {bill['name']} — +${abs(amount):.2f}"
+    else:
+        title = f"💳 {bill['name']} — ${amount:.2f}"
+
+    # Build RRULE and start date based on frequency
+    if freq == "monthly_2nd_wed":
+        rrule = "RRULE:FREQ=MONTHLY;BYDAY=2WE"
+        # Find next 2nd Wednesday
+        def nth_wed(y, m):
+            d = date(y, m, 1)
+            d += timedelta(days=(2 - d.weekday()) % 7)  # first Wednesday
+            return d + timedelta(weeks=1)                # second Wednesday
+        year, month = today.year, today.month
+        start_date = nth_wed(year, month)
+        if start_date < today:
+            month = month + 1 if month < 12 else 1
+            year  = year if month > 1 else year + 1
+            start_date = nth_wed(year, month)
+
+    elif freq == "weekly":
+        rrule = "RRULE:FREQ=WEEKLY"
+        start_date = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+
+    else:  # monthly (default)
+        rrule = f"RRULE:FREQ=MONTHLY;BYMONTHDAY={due_day}"
+        year, month = today.year, today.month
+        last_day = cal_mod.monthrange(year, month)[1]
+        start_date = date(year, month, min(due_day, last_day))
+        if start_date < today:
+            month = month + 1 if month < 12 else 1
+            year  = year if month > 1 else year + 1
+            last_day = cal_mod.monthrange(year, month)[1]
+            start_date = date(year, month, min(due_day, last_day))
 
     event_body = {
         "summary": title,

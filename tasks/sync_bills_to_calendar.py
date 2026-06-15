@@ -12,7 +12,7 @@ from integrations.google.calendar import get_service, get_or_create_calendar, up
 def get_bills() -> list[dict]:
     conn = get_conn()
     rows = conn.execute(
-        "SELECT name, amount, due_day FROM recurring_bills WHERE active=1"
+        "SELECT name, amount, due_day, frequency FROM recurring_bills WHERE active=1"
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
