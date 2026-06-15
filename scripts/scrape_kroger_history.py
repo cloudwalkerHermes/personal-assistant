@@ -32,8 +32,11 @@ def fetch_all_upcs_via_playwright() -> set[str]:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=False,
-            args=["--disable-blink-features=AutomationControlled"],
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--headless=new",
+            ],
         )
         ctx = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
