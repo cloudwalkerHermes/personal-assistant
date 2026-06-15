@@ -138,36 +138,76 @@ def hits_in_window(bills: list[dict]) -> list[dict]:
 
 # ── VARIABLE SPEND ────────────────────────────────────────────────────────────
 
-def avg_daily_variable(bills: list[dict]) -> float:
+SPEND_BUCKETS = {
+    "🛒 Food & Dining":  {"FOOD_AND_DRINK"},
+    "🛍️ Shopping":       {"GENERAL_MERCHANDISE"},
+    "🏥 Medical":        {"MEDICAL"},
+    "⛽ Transport":      {"TRANSPORTATION"},
+    "🎭 Entertainment":  {"ENTERTAINMENT"},
+    "🔧 Services":       {"GENERAL_SERVICES", "HOME_IMPROVEMENT"},
+    "📦 Other":          set(),  # catch-all for uncategorized
+}
+
+# Exclude these Plaid categories entirely from variable spend — already tracked in
+# the recurring projection or are non-variable by nature.
+EXCLUDE_CATEGORIES = {
+    "TRANSFER_OUT", "TRANSFER_IN", "BANK_FEES",
+    "RENT_AND_UTILITIES",  # utilities/rent — captured in recurring_bills
+    "LOAN_PAYMENTS",       # car loan, etc. — captured in recurring_bills
+}
+
+
+def variable_spend_by_bucket(bills: list[dict]) -> dict:
     """
-    Average daily spend from the last LOOKBACK_DAYS, excluding:
-      - All Zelle transactions (internal transfers + cash-out covered by recurring_bills)
-      - Transactions matching known recurring merchants
+    Returns {bucket_label: {"total": float, "daily": float}} for the last
+    LOOKBACK_DAYS, excluding transfers and known recurring merchants.
     """
     known = {b["plaid_merchant"].lower() for b in bills if b.get("plaid_merchant")}
     since = (TODAY - timedelta(days=LOOKBACK_DAYS)).isoformat()
 
     conn = get_conn()
     rows = conn.execute(
-        "SELECT amount, name, merchant_name FROM transactions "
+        "SELECT amount, name, merchant_name, category FROM transactions "
         "WHERE date >= ? AND pending = 0 AND amount > 0",
         (since,)
     ).fetchall()
     conn.close()
 
-    total = 0.0
+    buckets: dict[str, float] = {k: 0.0 for k in SPEND_BUCKETS}
+
     for row in rows:
+        cat     = (row["category"] or "").upper()
         name_l  = (row["name"] or "").lower()
         merch_l = (row["merchant_name"] or "").lower()
 
-        if "zelle" in name_l:
+        # Skip transfers and fees by category
+        if cat in EXCLUDE_CATEGORIES:
             continue
+        # Skip known recurring merchants
         if any(k in name_l or k in merch_l for k in known):
             continue
 
-        total += row["amount"]
+        # Assign to bucket
+        assigned = False
+        for label, categories in SPEND_BUCKETS.items():
+            if categories and cat in categories:
+                buckets[label] += row["amount"]
+                assigned = True
+                break
+        if not assigned:
+            buckets["📦 Other"] += row["amount"]
 
-    return total / LOOKBACK_DAYS
+    result = {}
+    for label, total in buckets.items():
+        if total > 0:
+            result[label] = {"total": round(total, 2), "daily": round(total / LOOKBACK_DAYS, 2)}
+    return result
+
+
+def avg_daily_variable(bills: list[dict]) -> float:
+    """Total average daily variable spend across all buckets."""
+    buckets = variable_spend_by_bucket(bills)
+    return sum(b["daily"] for b in buckets.values())
 
 
 # ── CALENDAR SCAN ─────────────────────────────────────────────────────────────
@@ -218,7 +258,7 @@ def calendar_money_events() -> list[dict]:
 # ── REPORT ────────────────────────────────────────────────────────────────────
 
 def print_report(balances: dict, total_avail: float, recurring_hits: list[dict],
-                 cal_events: list[dict], avg_daily: float):
+                 cal_events: list[dict], avg_daily: float, buckets: dict):
     W = 60
 
     print(f"\n{'─'*W}")
@@ -258,7 +298,9 @@ def print_report(balances: dict, total_avail: float, recurring_hits: list[dict],
         for e in cal_events:
             print(f"    {e['date']}  {e['name']:<26}   ${e['amount']:>8,.2f}")
 
-    print(f"\n  Variable spend est. (${avg_daily:.2f}/day × 14)  ${variable_14:>8,.2f}")
+    print(f"\n  VARIABLE SPEND  (${avg_daily:.2f}/day × 14 = ${variable_14:,.2f})")
+    for label, data in buckets.items():
+        print(f"    {label:<22} ${data['daily']:>6.2f}/day   (${data['total']:>8,.2f}/30d)")
 
     recurring_net = sum(h["amount"] for h in recurring_hits)
     cal_net       = sum(e["amount"] for e in cal_events)
@@ -273,7 +315,7 @@ def print_report(balances: dict, total_avail: float, recurring_hits: list[dict],
 
 
 def build_telegram_message(balances: dict, total_avail: float, recurring_hits: list[dict],
-                           cal_events: list[dict], avg_daily: float) -> str:
+                           cal_events: list[dict], avg_daily: float, buckets: dict) -> str:
     lines = [f"💰 Money Status — {TODAY}"]
     for inst, accounts in balances.items():
         for acct in accounts:
@@ -303,12 +345,16 @@ def build_telegram_message(balances: dict, total_avail: float, recurring_hits: l
         for e in cal_events:
             lines.append(f"  {e['date']}  {e['name']}: ${e['amount']:,.2f}")
 
+    lines.append(f"\n📊 Variable spend (${avg_daily:.2f}/day avg):")
+    for label, data in buckets.items():
+        lines.append(f"  {label}  ${data['daily']:.2f}/day")
+
     recurring_net = sum(h["amount"] for h in recurring_hits)
     cal_net       = sum(e["amount"] for e in cal_events)
     projected     = total_avail - recurring_net - variable_14 - cal_net
 
-    lines.append(f"\n  Variable est. (14d): ${variable_14:,.2f}")
-    lines.append(f"📊 Projected in 14 days: ${projected:,.2f}")
+    lines.append(f"\n  14d variable est: ${variable_14:,.2f}")
+    lines.append(f"📈 Projected in 14 days: ${projected:,.2f}")
 
     if projected < 200:
         lines.append("⚠️ Low balance — consider Zelle transfer.")
@@ -345,10 +391,11 @@ def main():
 
     recurring_hits = hits_in_window(bills)
     cal_events     = calendar_money_events()
-    avg_daily      = avg_daily_variable(bills)
+    buckets        = variable_spend_by_bucket(bills)
+    avg_daily      = sum(b["daily"] for b in buckets.values())
 
-    print_report(balances, total_avail, recurring_hits, cal_events, avg_daily)
-    msg = build_telegram_message(balances, total_avail, recurring_hits, cal_events, avg_daily)
+    print_report(balances, total_avail, recurring_hits, cal_events, avg_daily, buckets)
+    msg = build_telegram_message(balances, total_avail, recurring_hits, cal_events, avg_daily, buckets)
     telegram_send(msg)
 
 
