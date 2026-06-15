@@ -29,10 +29,15 @@ os.chdir(_ROOT)
 from dotenv import load_dotenv
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID")
-ANOMALY_FLAG       = os.path.join(_ROOT, ".wellness_anomaly")
-TODAY              = date.today().isoformat()
+TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID    = os.getenv("TELEGRAM_CHAT_ID")
+ELEVENLABS_API_KEY  = os.getenv("ELEVENLABS_API_KEY")
+ANOMALY_FLAG        = os.path.join(_ROOT, ".wellness_anomaly")
+TODAY               = date.today().isoformat()
+
+# Callum — husky, slightly unsettling. Swap voice_id when clone is ready.
+ELEVENLABS_VOICE_ID = "N2lVS1w4EtoT3dr4eOWO"
+ELEVENLABS_MODEL    = "eleven_flash_v2_5"
 
 
 # ── FLAG ──────────────────────────────────────────────────────────────────────
@@ -51,25 +56,35 @@ def read_flag() -> dict | None:
 # ── VOICE ─────────────────────────────────────────────────────────────────────
 
 def send_voice(text: str) -> bool:
-    try:
-        from gtts import gTTS
-    except ImportError:
-        print("[!] gTTS not installed")
+    if not ELEVENLABS_API_KEY:
+        print("[!] ELEVENLABS_API_KEY not set")
         return False
 
     mp3_path = ogg_path = None
     try:
+        # Generate via ElevenLabs
+        r = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
+            headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
+            json={
+                "text": text,
+                "model_id": ELEVENLABS_MODEL,
+                "voice_settings": {"stability": 0.75, "similarity_boost": 0.85},
+            },
+            timeout=20,
+        )
+        if r.status_code != 200:
+            print(f"[!] ElevenLabs error: {r.status_code} {r.text[:120]}")
+            return False
+
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
             mp3_path = f.name
-        gTTS(text=text, lang="en", slow=False).save(mp3_path)
+            f.write(r.content)
 
         ogg_path = mp3_path.replace(".mp3", ".ogg")
         proc = subprocess.run(
-            [
-                "ffmpeg", "-i", mp3_path,
-                "-c:a", "libopus", "-b:a", "24k",
-                "-vbr", "on", ogg_path, "-y", "-loglevel", "quiet",
-            ],
+            ["ffmpeg", "-i", mp3_path, "-c:a", "libopus", "-b:a", "24k",
+             "-vbr", "on", ogg_path, "-y", "-loglevel", "quiet"],
             capture_output=True,
         )
         if proc.returncode != 0:
@@ -77,15 +92,15 @@ def send_voice(text: str) -> bool:
             return False
 
         with open(ogg_path, "rb") as f:
-            r = requests.post(
+            r2 = requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVoice",
                 data={"chat_id": TELEGRAM_CHAT_ID},
                 files={"voice": ("arcus.ogg", f, "audio/ogg")},
                 timeout=15,
             )
-        ok = r.status_code == 200
+        ok = r2.status_code == 200
         if not ok:
-            print(f"[!] sendVoice failed: {r.status_code} {r.text[:120]}")
+            print(f"[!] sendVoice failed: {r2.status_code} {r2.text[:120]}")
         return ok
 
     except Exception as e:
@@ -122,7 +137,7 @@ def main():
     avg = flag.get("three_day_avg", "?")
     print(f"Anomaly active: 3-day avg {avg}. Sending check-in.")
 
-    sent = send_voice("Hey Mike.")
+    sent = send_voice("You ok?")
     if not sent:
         send_text(f"Hey Mike. 👀\n3-day wellness avg: {avg} / 100")
         print("Fell back to text.")
