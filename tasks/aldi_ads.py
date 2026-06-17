@@ -27,6 +27,7 @@ from integrations.telegram import send as telegram_send
 
 THUNDERBIT_API_KEY = os.getenv("THUNDERBIT_API_KEY")
 ALDI_URL           = "https://www.aldi.us/en/weekly-specials/"
+THUNDERBIT_BIN     = "/home/arcus/.hermes/node/bin/thunderbit"
 
 SCHEMA = json.dumps({
     "Product Name": {
@@ -76,7 +77,7 @@ def scrape() -> list[dict]:
 
     env    = {**os.environ, "THUNDERBIT_API_KEY": THUNDERBIT_API_KEY}
     result = subprocess.run(
-        ["thunderbit", "extract", ALDI_URL, "--format", "json", "--schema", SCHEMA],
+        [THUNDERBIT_BIN, "extract", ALDI_URL, "--format", "json", "--schema", SCHEMA],
         capture_output=True, text=True, env=env, timeout=120,
     )
 
