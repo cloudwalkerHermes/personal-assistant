@@ -225,6 +225,7 @@ def main():
         msg_lines.append("⚠️  Trending low — midday check incoming")
 
     telegram_send("\n".join(msg_lines))
+    print(f"Sent. avg_3d={avg_3d}  forecast={forecast_label}")
 
 
 if __name__ == "__main__":
