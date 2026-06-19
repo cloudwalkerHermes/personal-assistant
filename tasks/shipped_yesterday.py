@@ -45,7 +45,7 @@ def get_yesterdays_commits() -> list[str]:
 
 def build_message(commits: list[str]) -> str:
     yesterday = date.today() - timedelta(days=1)
-    lines = [f"🚀 Shipped — {yesterday:%a %b %-d}", ""]
+    lines = [f"🚀 ArcusHermes — Shipped ({yesterday:%a %b %-d})", ""]
 
     if not commits:
         lines.append("Quiet day on the build side. That's fine too.")
