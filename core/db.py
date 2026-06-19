@@ -98,23 +98,10 @@ def init_db():
                 max_stress       INTEGER,
                 created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-
-            CREATE TABLE IF NOT EXISTS garmin_fitness (
-                id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-                date                  DATE NOT NULL UNIQUE,
-                chronological_age     REAL,
-                fitness_age           REAL,
-                achievable_age        REAL,
-                previous_fitness_age  REAL,
-                vigorous_days_avg     REAL,
-                vigorous_minutes_avg  REAL,
-                rhr                   INTEGER,
-                bmi                   REAL,
-                bmi_target            REAL,
-                bmi_last_measured     DATE,
-                created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
         """)
+
+    conn.execute("DROP TABLE IF EXISTS garmin_fitness")
+    conn.commit()
 
     # Migrations for columns added after initial deploy
     try:
