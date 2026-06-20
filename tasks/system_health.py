@@ -36,16 +36,11 @@ HEALTH_CHAT_ID      = os.getenv("TELEGRAM_HEALTH_CHAT_ID")
 TOLERANCE_MIN = 10
 SELF_NAME     = "system_health.py"
 
-# Long-running daemon-style jobs that only log at sparse events (market open/
-# close, trades) rather than on every invocation. Log mtime isn't a reliable
-# "did it run" signal for these — exclude them.
-#
-# Also: temporary, date-range-only crons (no .py, so no script_match — label
-# falls back to command[:40]). Their schedule has no occurrence yet this year,
-# so croniter's get_prev() jumps back to last year and reports as wildly
+# Temporary, date-range-only crons (no .py, so no script_match — label falls
+# back to command[:40]). Their schedule has no occurrence yet this year, so
+# croniter's get_prev() jumps back to last year and reports as wildly
 # overdue. Remove the entry here when the underlying cron is removed.
 EXCLUDED = {
-    "checkmark_scanner.py",
     'cmd.exe /c "start firefox https://aldibl',  # Aldi blind box, June 22-25 2026 only
 }
 
