@@ -41,7 +41,7 @@ SELF_NAME     = "system_health.py"
 # croniter's get_prev() jumps back to last year and reports as wildly
 # overdue. Remove the entry here when the underlying cron is removed.
 EXCLUDED = {
-    'cmd.exe /c "start firefox https://aldibl',  # Aldi blind box, June 22-25 2026 only
+    '/mnt/c/Windows/system32/cmd.exe /c "star',  # Aldi blind box, June 22-25 2026 only
 }
 
 
