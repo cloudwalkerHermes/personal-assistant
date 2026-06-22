@@ -60,8 +60,14 @@ you get `"No voice profile resolved"`, you need an actual profile object
 ```bash
 curl http://192.168.1.3:17493/profiles
 ```
-Check this first — a profile named "Agent Smith" already exists (created
-this session). Don't recreate it; reuse its `id`.
+Check this first — a working cloned voice profile named **"Hugo Weaving"**
+already exists (id `3629b093-8ae1-43da-99aa-22ed81aa190a` as of 2026-06-22,
+but always re-check via the call above since IDs aren't guaranteed stable).
+`voice_type: "cloned"`, 3 samples, confirmed good generation quality on
+real test phrases. Don't recreate it — reuse this profile and pass
+`"engine": "qwen"` explicitly in `/speak` calls (its `default_engine` field
+is null, so the engine isn't baked in automatically). Generation is slow
+on this CPU-only setup — that's expected, not a bug, budget for it.
 
 **Create a profile (preset voice, no cloning):**
 ```bash
@@ -108,4 +114,6 @@ curl -X POST http://192.168.1.3:17493/transcribe \
 One shared local voice backend (TTS, voice cloning, transcription) for the
 whole agent network instead of each machine needing its own setup or its
 own ElevenLabs API cost. Confirmed working end-to-end: REST call → audio
-generated → played through the desktop's actual speakers.
+generated → played through the desktop's actual speakers — and confirmed
+good cloning quality with the Hugo Weaving profile on real test phrases,
+not just a synthetic smoke test.
