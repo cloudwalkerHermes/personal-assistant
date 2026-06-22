@@ -5,8 +5,13 @@ tasks/wellness_check.py
 1:00 PM M-F conditional midday wellness check.
 
 Reads the anomaly flag written by wellness_forecast.py.
-If today's 3-day composite average was below threshold, sends
-a voice message to Telegram: "Hey Mike."
+If today's 3-day composite average was below threshold, has Voicebox
+speak a check-in through the Rory Cochrane voice clone, played locally
+through the Windows desktop's speakers.
+
+Local-only by design for now — if that stops fitting (more time away
+from the desktop), revisit and route this back through Telegram voice
+the way it used to work.
 
 Exits silently on good days — zero noise when you're doing well.
 
@@ -17,8 +22,6 @@ Run from personal-assistant/:
 import os
 import sys
 import json
-import tempfile
-import subprocess
 import requests
 from datetime import date
 
@@ -31,13 +34,13 @@ load_dotenv()
 
 TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID    = os.getenv("TELEGRAM_CHAT_ID")
-ELEVENLABS_API_KEY  = os.getenv("ELEVENLABS_API_KEY")
 ANOMALY_FLAG        = os.path.join(_ROOT, ".wellness_anomaly")
 TODAY               = date.today().isoformat()
 
-# Callum — husky, slightly unsettling. Swap voice_id when clone is ready.
-ELEVENLABS_VOICE_ID = "N2lVS1w4EtoT3dr4eOWO"
-ELEVENLABS_MODEL    = "eleven_flash_v2_5"
+VOICEBOX_URL  = "http://192.168.1.3:17493"
+RORY_PROFILE  = "35b05941-2681-441f-97d4-905cd7a2d5e4"  # Rory Cochrane
+RORY_ENGINE   = "qwen"
+CHECKIN_TEXT  = "Hey Mike, it's your pal Slater... just like checking up on ya, man."
 
 
 # ── FLAG ──────────────────────────────────────────────────────────────────────
@@ -55,64 +58,20 @@ def read_flag() -> dict | None:
 
 # ── VOICE ─────────────────────────────────────────────────────────────────────
 
-def send_voice(text: str) -> bool:
-    if not ELEVENLABS_API_KEY:
-        print("[!] ELEVENLABS_API_KEY not set")
-        return False
-
-    mp3_path = ogg_path = None
+def send_voice() -> bool:
     try:
-        # Generate via ElevenLabs
         r = requests.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}",
-            headers={"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"},
-            json={
-                "text": text,
-                "model_id": ELEVENLABS_MODEL,
-                "voice_settings": {"stability": 0.75, "similarity_boost": 0.85},
-            },
-            timeout=20,
+            f"{VOICEBOX_URL}/speak",
+            json={"text": CHECKIN_TEXT, "profile": RORY_PROFILE, "engine": RORY_ENGINE},
+            timeout=30,
         )
-        if r.status_code != 200:
-            print(f"[!] ElevenLabs error: {r.status_code} {r.text[:120]}")
-            return False
-
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-            mp3_path = f.name
-            f.write(r.content)
-
-        ogg_path = mp3_path.replace(".mp3", ".ogg")
-        proc = subprocess.run(
-            ["ffmpeg", "-i", mp3_path, "-c:a", "libopus", "-b:a", "24k",
-             "-vbr", "on", ogg_path, "-y", "-loglevel", "quiet"],
-            capture_output=True,
-        )
-        if proc.returncode != 0:
-            print("[!] ffmpeg failed")
-            return False
-
-        with open(ogg_path, "rb") as f:
-            r2 = requests.post(
-                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVoice",
-                data={"chat_id": TELEGRAM_CHAT_ID},
-                files={"voice": ("arcus.ogg", f, "audio/ogg")},
-                timeout=15,
-            )
-        ok = r2.status_code == 200
+        ok = r.status_code == 200
         if not ok:
-            print(f"[!] sendVoice failed: {r2.status_code} {r2.text[:120]}")
+            print(f"[!] Voicebox /speak failed: {r.status_code} {r.text[:120]}")
         return ok
-
     except Exception as e:
-        print(f"[!] voice error: {e}")
+        print(f"[!] Voicebox unreachable: {e}")
         return False
-    finally:
-        for p in [mp3_path, ogg_path]:
-            if p and os.path.exists(p):
-                try:
-                    os.unlink(p)
-                except Exception:
-                    pass
 
 
 def send_text(message: str):
@@ -137,9 +96,9 @@ def main():
     avg = flag.get("three_day_avg", "?")
     print(f"Anomaly active: 3-day avg {avg}. Sending check-in.")
 
-    sent = send_voice("You ok?")
+    sent = send_voice()
     if not sent:
-        send_text(f"Hey Mike. 👀\n3-day wellness avg: {avg} / 100")
+        send_text(f"🎸 Slater was gonna check up on ya, Mike, but couldn't reach the booth.\n3-day wellness avg: {avg} / 100")
         print("Fell back to text.")
 
     print("Check-in sent.")

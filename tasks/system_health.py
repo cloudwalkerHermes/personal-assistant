@@ -40,8 +40,15 @@ SELF_NAME     = "system_health.py"
 # back to command[:40]). Their schedule has no occurrence yet this year, so
 # croniter's get_prev() jumps back to last year and reports as wildly
 # overdue. Remove the entry here when the underlying cron is removed.
+#
+# Guiding principle: anything delivered via Voicebox is excluded from this
+# watchdog, full stop. Log mtime only proves the script ran — it can't prove
+# the audio actually played or reached anyone, so monitoring it would give
+# false confidence. Add every Voicebox-delivered cron here as it's built.
 EXCLUDED = {
     '/mnt/c/Windows/system32/cmd.exe /c "star',  # Aldi blind box, June 22-25 2026 only
+    "rory_checkin.py",       # Voicebox-delivered
+    "wellness_check.py",     # Voicebox-delivered (Rory Cochrane check-in)
 }
 
 
